@@ -13,7 +13,7 @@ from core.bootstrap import bootstrap
 
 class thCreator(Thread):
 
-    def __init__(self, iface, sendOptions=None, sendFunction=None, pkt=None):
+    def __init__(self, pkt, trafficID, iface, sendOptions=None, sendFunction=None):
         Thread.__init__(self)
         self.pkt = pkt
         self.sendOptions = sendOptions
@@ -23,6 +23,7 @@ class thCreator(Thread):
         self.sentCount = 0
         self.sendFunction = sendFunction
         self.iface = iface
+        self.trafficID = trafficID
 
     def scapySend(self):
         try:
@@ -59,7 +60,6 @@ class thCreator(Thread):
                     return
         except Exception as err:
             logging.error(f'Error occured in the traffic send thread. Error: {err}')
-            #self.error = err
             return
 
     def sendTCPReplay(self):
@@ -87,10 +87,15 @@ class thCreator(Thread):
                 sleep(1)
             sendProc.send_signal(subprocess.signal.SIGINT)
             sleep(2)
-            if str(sendProc.communicate()[1]) != '':
-                raise Exception(sendProc.communicate()[1])
+            results = sendProc.communicate()[0].decode('UTF-8')
+            error = sendProc.communicate()[1].decode('UTF-8')
+            if error:
+                raise Exception(error)
+            self.sendOptions = command
+            self.sentCount = results 
+            
         except Exception as err:
-            self.error = str(err)
+            self.error = err
             logging.error(err)
 
     ################# THREADS'S RUN FUNCTION #####################################
@@ -181,15 +186,15 @@ class tSend(object):
     def startScapyThread(self):
 
     ########## CHOOSE THE PACKET TO SEND OR CAPTURE TO REPLAY.... OR EXIT #############
-        userInput = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
+        userTrInp = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
                                      title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose a packet to send', 2),
                                      clearUI = self.os, allowEmpty=True)
-        if not userInput:
+        if not userTrInp:
             return
-        if int(userInput) < 100:
-            selectedTraffic = self.pkts[userInput]
-        elif int(userInput) >= 100:
-            selectedTraffic = rdpcap(f'./temp/{self.pkts[userInput]}')
+        if int(userTrInp) < 100:
+            selectedTraffic = self.pkts[userTrInp]
+        elif int(userTrInp) >= 100:
+            selectedTraffic = rdpcap(f'./temp/{self.pkts[userTrInp]}')
 
    ############ CHOOSE THE SENDING INTERFACE OR EXIT ######################
 
@@ -205,22 +210,22 @@ class tSend(object):
         options = ['inter', 'loop', 'count', 'realtime']
         self.parseThreadOptions(options)
 
-        thread = thCreator(pkt = selectedTraffic, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
+        thread = thCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
 
     def startTCPReplayThread(self):
-        userInput = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
+        userTrInp = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
                                      title = ('SEND TRAFFIC >> Send traffic using TCPReplay >> Choose a packet to send', 2),
                                      clearUI = self.os, allowEmpty=True)
-        if not userInput:
+        if not userTrInp:
             return
-        if int(userInput) < 100:
-            wrpcap('./temp/tcp_rep_sp.pcap', self.pkts[userInput])
+        if int(userTrInp) < 100:
+            wrpcap('./temp/tcp_rep_sp.pcap', self.pkts[userTrInp])
             selectedTraffic = './temp/tcp_rep_sp.pcap'
-        elif int(userInput) >= 100:
-            selectedTraffic = f'./temp/{self.pkts[userInput]}'
+        elif int(userTrInp) >= 100:
+            selectedTraffic = f'./temp/{self.pkts[userTrInp]}'
 
         userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
                                      menu = self.ifacesDict,
@@ -235,7 +240,7 @@ class tSend(object):
         options = ['pps', 'mbps', 'loop']
         self.parseThreadOptions(options)
 
-        thread = thCreator(pkt = selectedTraffic, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'TCPReplay')
+        thread = thCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'TCPReplay')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
@@ -247,13 +252,13 @@ class tSend(object):
             print(f'------------Thread {threadID} stats:-------------- \n' \
                   f'Is thread still active?: {self.threadsDict[threadID].is_alive()} \n'
                   f'Error encountered: {self.threadsDict[threadID].error} \n' \
-                  f'Packet summary: {self.threadsDict[threadID].pkt.summary()} \n' \
+                  f'Packet\Capture ID: {self.threadsDict[threadID].trafficID} \n' \
                   f'Sending interface: {self.threadsDict[threadID].iface} \n'
                   f'Number of packets sent: {self.threadsDict[threadID].sentCount} \n'
                   f'Send Type: {self.threadsDict[threadID].sendFunction} \n' \
                   f'Send Options: {self.threadsDict[threadID].sendOptions}')
-        except Exception:
-            logging.error(f'You cannot take this action. Thread ID: {threadID} does not exist')
+        except Exception as err:
+            logging.error(f'You cannot take this action. Error {err} occured while trying to fetch the Thread {threadID}\'s stats')
 
     def removeThread(self, threadID):
         try:
