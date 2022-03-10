@@ -13,7 +13,7 @@ from core.bootstrap import bootstrap
 
 class thCreator(Thread):
 
-    def __init__(self, iface, sendOptions=None, sendFunction=None, pkt=None, pkap=None): #sendType):
+    def __init__(self, iface, sendOptions=None, sendFunction=None, pkt=None):
         Thread.__init__(self)
         self.pkt = pkt
         self.sendOptions = sendOptions
@@ -23,7 +23,6 @@ class thCreator(Thread):
         self.sentCount = 0
         self.sendFunction = sendFunction
         self.iface = iface
-        self.pkap = pkap
 
     def scapySend(self):
         try:
@@ -64,7 +63,7 @@ class thCreator(Thread):
             return
 
     def sendTCPReplay(self):
-    
+
         ###### CREATE THE TCPREPLAY COMMAND BASED ON USER'S INPUT ######
         command = ['tcpreplay', '--quiet', '--preload-pcap', '-i', self.iface]
         if 'mbps' in self.sendOptions:
@@ -73,13 +72,12 @@ class thCreator(Thread):
             command.append(f"--pps={int(self.sendOptions['pps'])}")
         else:
             command.append(f"--topspeed")
-        
+
         if 'loop' in self.sendOptions:
             command.append(f"--loop={int(self.sendOptions['loop'])}")
         else:
-            command.append("--loop=1")     
-        command.append(self.pkap)
-        ###### 
+            command.append("--loop=1")
+        command.append(self.pkt)
         ###### CALL TCPREPLAY, POPULATE THREAD INFO AND TRY TO CATCH THE ERRORS ########
         try:
             sendProc = subprocess.Popen(command, stdout=PIPE, stderr=PIPE)
@@ -94,22 +92,20 @@ class thCreator(Thread):
         except Exception as err:
             self.error = str(err)
             logging.error(err)
-    
+
     ################# THREADS'S RUN FUNCTION #####################################
     def run(self):
             if self.sendFunction == 'Scapy':
                 self.scapySend()
             elif self.sendFunction == 'TCPReplay':
                 self.sendTCPReplay()
-            else:
-                print('[WRN] [tSend] : Unknown operation requested')
 
 class tSend(object):
 
     hasUI = True
     showUIMenu = "Send traffic"
     _instance = None
-    
+
     def __new__(cls): # singleton. Make sure there can be only one craft object and use that
         if cls._instance is None:
             cls._instance = super(tSend, cls).__new__(cls)
@@ -119,18 +115,16 @@ class tSend(object):
         self.lastScapyConfig = None
         self.lastTcpReplayConfig = None
         self.threadsDict = OrderedDict()
-    
+
     def resourceLoader(self):
         captures = getCaps()
         packets = 'packets' in bootstrap.resources and bootstrap.resources['packets']
-        
+
         if 'environment' not in bootstrap.resources:
             raise Exception('OS critical resources are not available. Check \'environment\' module')
         if not captures:
-            #assert 'packets' in bootstrap.resources and bool(bootstrap.resources['packets'])
             assert packets
             self.pkts = bootstrap.resources['packets']
-        #elif captures and 'packets' in bootstrap.resources and bool(bootstrap.resources['packets']):
         elif captures and packets:
             self.pkts = bootstrap.resources['packets']
             self.pkts.update(captures)
@@ -169,9 +163,9 @@ class tSend(object):
         i = 1
         while str(i) in self.threadsDict.keys():
             i += 1
-        logging.info(f'The thread has been assigned ID: {i}')    
+        logging.info(f'The thread has been assigned ID: {i}')
         return str(i)
-    
+
     def parseThreadOptions(self, options):
         optionsDict = {}
         for option in options:
@@ -185,48 +179,50 @@ class tSend(object):
         self.sendOptions = optionsDict
 
     def startScapyThread(self):
-        
+
     ########## CHOOSE THE PACKET TO SEND OR CAPTURE TO REPLAY.... OR EXIT #############
-        userInput = menuOptValidator(text = 'Select the packet\capture to send:',
-                                                      menu = self.pkts,
-                                                      showMenu = True,
-                                                      title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose a packet to send', 2),
-                                                      clearUI = self.os,
-                                                      allowEmpty=True)
+        userInput = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
+                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose a packet to send', 2),
+                                     clearUI = self.os, allowEmpty=True)
         if not userInput:
             return
         if int(userInput) < 100:
             selectedTraffic = self.pkts[userInput]
         elif int(userInput) >= 100:
             selectedTraffic = rdpcap(f'./temp/{self.pkts[userInput]}')
-            
-   ########### CHOOSE THE SENDING FUNCTION OR EXIT ###################
-        #sendFunction = {'1': 'Scapy', '2':'TCP Replay'}
-        #
-        #userInput = menuOptValidator(text = 'Choose the traffic send method (empty to exit): ', 
-        #                             menu = sendFunction,
-        #                             showMenu = True,
-        #                             allowEmpty = True,
-        #                             clearUI = self.os,
-        #                             title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending method', 2))
-                                     
-       # if not userInput:
-       #     return
-       # if userInput == '2':
-       #     if self.os == 'Windows':
-       #         logging.error('TCP Replay function is not available on Windows.')
-       #         return
-       #     wrpcap('temp.pcap', self.selectedPkt)
-       #     self.pkap = 'temp.pcap'
-       #     sendFunction = 'TCPReplay'
-       #     options = ['pps', 'mbps', 'loop']
-       # elif userInput == '1':
-       #     sendFunction = 'Scapy'
-       #     options = ['inter', 'loop', 'count', 'realtime']
-        
+
    ############ CHOOSE THE SENDING INTERFACE OR EXIT ######################
-        
-        userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ', 
+
+        userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
+                                     menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
+                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending interface', 2))
+
+        if not userInput:
+            return
+
+        selectedIface = self.ifacesDict[userInput]
+
+        options = ['inter', 'loop', 'count', 'realtime']
+        self.parseThreadOptions(options)
+
+        thread = thCreator(pkt = selectedTraffic, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
+        thread.start()
+        self.threadsDict[self.setThreadIndex()] = thread
+        logging.info('The sending thread has been started')
+
+    def startTCPReplayThread(self):
+        userInput = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
+                                     title = ('SEND TRAFFIC >> Send traffic using TCPReplay >> Choose a packet to send', 2),
+                                     clearUI = self.os, allowEmpty=True)
+        if not userInput:
+            return
+        if int(userInput) < 100:
+            wrpcap('./temp/tcp_rep_sp.pcap', self.pkts[userInput])
+            selectedTraffic = './temp/tcp_rep_sp.pcap'
+        elif int(userInput) >= 100:
+            selectedTraffic = f'./temp/{self.pkts[userInput]}'
+
+        userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
                                      menu = self.ifacesDict,
                                      showMenu = True,
                                      allowEmpty = True,
@@ -235,21 +231,14 @@ class tSend(object):
 
         if not userInput:
             return
-
         selectedIface = self.ifacesDict[userInput]
-        
-        options = ['inter', 'loop', 'count', 'realtime']
+        options = ['pps', 'mbps', 'loop']
         self.parseThreadOptions(options)
 
-        thread = thCreator(pkt = selectedTraffic, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
+        thread = thCreator(pkt = selectedTraffic, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'TCPReplay')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
-        #del(thread)
-        
-    def startTCPReplayThread(self):
-        pass
-        
 
     def showThreadInfo(self, threadID):
         clearConsole(self.os)
@@ -317,20 +306,18 @@ class tSend(object):
                                               menu = self.threadsDict,
                                               allowEmpty = True)
             if not selectedThread:
-                return    
+                return
 
             optionDict = {'1' : [self.showThreadInfo, 'Show information about the thread'],
                           '2' : [self.stopThread, 'Stop thread\'s execution'],
                           '3' : [self.removeThread, 'Remove this thread']}
-        
+
             while True:
 
                 threadAction = menuOptValidator(text = 'Select an action for this thread (empty to exit): ',
-                                               menu = optionDict,
-                                               showMenu = True,
-                                               clearUI = self.os,
-                                               allowEmpty=True,
-                                               title = (f'SEND TRAFFIC >> Show and control the sending threads >> Thread ID {selectedThread} >> Actions you can take', 3))
+                                                menu = optionDict, showMenu = True, clearUI = self.os, allowEmpty=True,
+                                                title = (f'SEND TRAFFIC >> Show and control the sending threads' \
+                                                ' >> Thread ID {selectedThread} >> Actions you can take', 3))
                 if not threadAction:
                     return
 
@@ -340,7 +327,7 @@ class tSend(object):
 
     def exitModule(self):
         self.exitMenu = True
-    
+
     def menuOptions(self):
 
         optionDict = OrderedDict()
@@ -353,11 +340,8 @@ class tSend(object):
 
         while not self.exitMenu:
 
-            self.userHelpChoice = menuOptValidator(text = 'Enter a menu option: ',
-                                                   menu = optionDict, 
-                                                   showMenu = True,
-                                                   allowEmpty = False,
-                                                   clearUI = self.os,
+            self.userHelpChoice = menuOptValidator(text = 'Enter a menu option: ', menu = optionDict, showMenu = True,
+                                                   allowEmpty = False, clearUI = self.os,
                                                    title = ('SEND TRAFFIC - Module Menu', 2))
 
             optionDict[self.userHelpChoice][0]()
