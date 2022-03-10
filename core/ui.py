@@ -50,15 +50,15 @@ class ui(object):
                 bootstrap.resources[name] = resource                 # so other modules can access them
 
     def launch(self):
-#        try:
+        try:
             self.resourceLoader()
             self.run()
-#            return 0
-#        except KeyboardInterrupt:
-#            raise
-#        except Exception as err:
-#            logging.critical(err)
-#            raise
+            return 0
+        except KeyboardInterrupt:
+            raise
+        except Exception as err:
+            logging.critical(err)
+            raise
 
 # Core module whose purpose is to: 
 # - build the main menu based on the number of UI modules

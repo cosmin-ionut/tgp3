@@ -1,5 +1,5 @@
 import logging
-import signal
+#import signal
 from subprocess import PIPE, Popen
 from collections import OrderedDict
 from scapy.all import *
@@ -228,10 +228,7 @@ class tSend(object):
             selectedTraffic = f'./temp/{self.pkts[userTrInp]}'
 
         userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
-                                     menu = self.ifacesDict,
-                                     showMenu = True,
-                                     allowEmpty = True,
-                                     clearUI = self.os,
+                                     menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
                                      title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending interface', 2))
 
         if not userInput:
@@ -353,19 +350,19 @@ class tSend(object):
             input('Press ENTER to continue...')
 
     def launch(self):
-#        try:
+        try:
             self.exitMenu = False
             self.resourceLoader()
             self.menuOptions()
             return('send', None)
-#        except AssertionError:
-#            logging.error(f'No packets have been crafted. There is nothing to send. Exiting module...')
-#            input('Press ENTER to continue...')
-#            return('send', None)
-#        except KeyboardInterrupt:
-#            raise
-#        except Exception as err:
-#            logging.critical(f'Module exiting... Error: {err}')
-#            raise
+        except AssertionError:
+            logging.error(f'No packets have been crafted. There is nothing to send. Exiting module...')
+            input('Press ENTER to continue...')
+            return('send', None)
+        except KeyboardInterrupt:
+            raise
+        except Exception as err:
+            logging.critical(f'Module exiting... Error: {err}')
+            raise
 
 # foloseste self.error pentru a verifica in functiile de meniu daca nu cumva exista erori.

@@ -20,7 +20,7 @@ class bootstrap(object):
     # UI core gets a sepcial treatment
     @classmethod
     def execute(cls):
-#        try:
+        try:
             for coreMod in cls.coreModules:
                 if coreMod().__class__.__name__ == 'ui':
                     ui = coreMod()
@@ -28,12 +28,12 @@ class bootstrap(object):
                 name, resource = coreMod().launch()
                 cls.resources[name] = resource
             return ui.launch()  
-#        except KeyboardInterrupt:
-#            logging.info('The application has been closed at user\'s request')
-#            exit(1)
-#        except Exception as err:
-#            logging.critical(f'Application cannot continue: {err}')
-#            exit(1)
+        except KeyboardInterrupt:
+            logging.info('The application has been closed at user\'s request')
+            exit(1)
+        except Exception as err:
+            logging.critical(f'Application cannot continue: {err}')
+            exit(1)
                 
 # Flow:
 # all enabled features in run.py will be sent her. They will be sorted into uiModules and coreModules.
