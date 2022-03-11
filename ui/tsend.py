@@ -11,7 +11,7 @@ from utils.uiUtils import clearConsole, titleFormatter
 from utils.getCaps import getCaps
 from core.bootstrap import bootstrap
 
-class thCreator(Thread):
+class sendThCreator(Thread):
 
     def __init__(self, pkt, trafficID, iface, sendOptions=None, sendFunction=None):
         Thread.__init__(self)
@@ -210,7 +210,7 @@ class tSend(object):
         options = ['inter', 'loop', 'count', 'realtime']
         self.parseThreadOptions(options)
 
-        thread = thCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
+        thread = sendThCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
@@ -237,7 +237,7 @@ class tSend(object):
         options = ['pps', 'mbps', 'loop']
         self.parseThreadOptions(options)
 
-        thread = thCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'TCPReplay')
+        thread = sendThCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'TCPReplay')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
