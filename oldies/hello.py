@@ -1,32 +1,25 @@
-import turtle
+from scapy.all import *
+from time import sleep
 
-turtle.setup(400,500)                # Determine the window size
-wn = turtle.Screen()                 # Get a reference to the window
-wn.title("Handling keypresses!")     # Change the window title
-wn.bgcolor("lightgreen")             # Set the background color
-tess = turtle.Turtle()               # Create our favorite turtle
+class e(Thread):
 
-# The next four functions are our "event handlers".
-def h1():
-   tess.forward(30)
+   def __init__(self):
+      Thread.__init__(self)
 
-def h2():
-   tess.left(45)
+   def run(self):
+      self.e = AsyncSniffer()
+      self.e.start()
+      sleep(5)
+      self.x = self.e.stop()
 
-def h3():
-   tess.right(45)
 
-def h4():
-    wn.bye()                        # Close down the turtle window
+a = e()
+a.start()
+print(a.e)
+print(a.e.results)
+print(a.e.results)
+sleep(7)
+print(a.e)
+print(a.e.results)
+print(a.x)
 
-# These lines "wire up" keypresses to the handlers we've defined.
-wn.onkey(h1, "Up")
-wn.onkey(h2, "Left")
-wn.onkey(h3, "Right")
-wn.onkey(h4, "q")
-
-# Now we need to tell the window to start listening for events,
-# If any of the keys that we're monitoring is pressed, its
-# handler will be called.
-wn.listen()
-wn.mainloop()
