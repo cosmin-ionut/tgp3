@@ -1,3 +1,4 @@
+from configparser import NoOptionError
 from threading import Thread
 from collections import OrderedDict
 #from core.bootstrap import bootstrap
@@ -63,18 +64,19 @@ class sniffThCreator(Thread):
         self.sniffOptions = sniffOptions
         self.stopFlag = Event()
         self.pktBuffer = {}
+        #self.sniffResults = None
         
-    def asyncCallback(self, pkt):
-        #self.pktList = (self.currentPktID, pkt)
+    def scapyAsyncCallback(self, pkt):
         self.currentPktID += 1
         self.pktBuffer[self.currentPktID] = pkt
-        #self.currentPktID += 1
-
         
     def scapySniffer(self):
-        self.asyncThread = AsyncSniffer(prn = self.asyncCallback, iface = self.iface, **self.sniffOptions)
+        self.asyncThread = AsyncSniffer(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
         self.asyncThread.start()
         print('started capturing')
+    
+    def tcpdumpSniffer(self):
+        self.Async
 
     def run(self):
         try:
@@ -84,10 +86,13 @@ class sniffThCreator(Thread):
                 if len(self.pktBuffer) > 120000:
                     print('I DELETED')
                     self.pktBuffer = {}
-                if self.asyncThread.results:
+                #if self.asyncThread.results:
+                if not self.asyncThread.running:
+                    self.sniffResults = self.asyncThread.results
                     break
                 if self.stopFlag.is_set():
                     self.asyncThread.stop()
+                    self.sniffResults = self.asyncThread.results
                     break
         except Exception as err:
             self.asyncThread.stop()
@@ -151,10 +156,32 @@ class tSniff(object):
         logging.info(f'Capturing packets on interface {selectedIface}')
         #self.a = sniffThCreator()
         #self.a.start()
+    
+    def startTCPDumpSniff(self):
+
+   ############ CHOOSE THE SNIFFING INTERFACE OR EXIT ######################
+
+        userInput = menuOptValidator(text = 'Choose an interface to capture traffic (empty to exit): ',
+                                     menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
+                                     title = ('CAPTURE TRAFFIC >> Capture traffic using TCPDump >> Choose the interface', 2))
+
+        if not userInput:
+            return
+
+        selectedIface = self.ifacesDict[userInput]
+        
+        options = {'count' : int, 'store': bool, 'filter': str, 'timeout': float }
+        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options))
+        thread.start()
+        self.threadsDict[self.setThreadIndex()] = thread 
+        logging.info(f'Capturing packets on interface {selectedIface}')
+        #self.a = sniffThCreator()
+        #self.a.start()
         
     def stop(self):
         pass
 
+    '''
     def stopThread(self, threadID):
         try:
             if self.threadsDict[threadID].is_alive():
@@ -173,14 +200,42 @@ class tSniff(object):
         except Exception as err:
             logging.error(f'Error occured during thread termination. Error: {err}')
             return
-    
+    '''    
+    def stopThread(self, threadID):
+        try:
+            if self.threadsDict[threadID].is_alive():
+                self.threadsDict[threadID].stopFlag.set()
+                i = 1
+                while i <= 2 and self.threadsDict[threadID].is_alive():
+                    logging.info(f'Stopping thread ID: {threadID}...attempt number {i}.')
+                    sleep(3)
+                    i += 1
+                if self.threadsDict[threadID].is_alive():
+                    logging.error(f'Maximum number of attempts reached. Thread ID: {threadID} termination failed!')
+                    raise
+                elif not self.threadsDict[threadID].is_alive():
+                    print(f'Thread ID: {threadID}\'s execution has been stopped')
+                    return
+            else:
+                logging.info(f'Thread ID: {threadID} is not executing.')
+                return
+        except Exception as err:
+            logging.error(f'Error occured during thread termination. Error: {err}')
+            return
+
     def showRealtimeVerbose(self, threadID):
         try:
-            currentID = self.threadsDict[threadID].currentPktID
-            while True:
-                if currentID <= self.threadsDict[threadID].currentPktID:
-                    print(f'Pkt ID {currentID} : {self.threadsDict[threadID].pktBuffer[currentID].show2()}')
-                    currentID += 1
+            if self.threadsDict[threadID].is_alive():
+                currentID = self.threadsDict[threadID].currentPktID
+                while True:
+                    if currentID <= self.threadsDict[threadID].currentPktID:
+                        print(f'Pkt ID {currentID} : {self.threadsDict[threadID].pktBuffer[currentID].summary()}')
+                        currentID += 1
+            else:
+                i = 1
+                for pkt in self.threadsDict[threadID].sniffResults:
+                    print(f'Pkt ID: {i} : {pkt.summary()}')
+                    i += 1
         except KeyboardInterrupt:
             return
         except Exception as err:
@@ -188,15 +243,22 @@ class tSniff(object):
 
     def showRealtimeSummary(self, threadID):
         try:
-            currentID = self.threadsDict[threadID].currentPktID
-            while True:
-                if currentID <= self.threadsDict[threadID].currentPktID:
-                    print(f'Pkt ID {currentID} : {self.threadsDict[threadID].pktBuffer[currentID].summary()}')
-                    currentID += 1
+            if self.threadsDict[threadID].is_alive():
+                currentID = self.threadsDict[threadID].currentPktID
+                while True:
+                    if currentID <= self.threadsDict[threadID].currentPktID:
+                        print(f'Pkt ID {currentID} : {self.threadsDict[threadID].pktBuffer[currentID].summary()}')
+                        currentID += 1
+            else:
+                i = 1
+                for pkt in self.threadsDict[threadID].sniffResults:
+                    print(f'Pkt ID: {i} : {pkt.summary()}')
+                    i += 1
         except KeyboardInterrupt:
             return
         except Exception as err:
             logging.error(err)
+
 
     
     def threadControl(self):
@@ -245,17 +307,28 @@ class tSniff(object):
 
     def show(self):
         pass
+
     def saveCapture(self):
         pass
-    def removeThread(self):
-        pass
+
+    def removeThread(self, threadID):
+        try:
+            if self.threadsDict[threadID].is_alive():
+                logging.error(f'You cannot delete a running thread. Thread ID: {threadID} is still running')
+                return
+            del(self.threadsDict[threadID])
+            sleep(1)
+            if threadID not in self.threadsDict:
+                logging.info(f'Thread ID: {threadID} has been deleted successfully.')
+        except Exception:
+            logging.error(f'You cannot take this action. Thread ID: {threadID} does not exist')
 
     def menuOptions(self):
     
         optionDict = OrderedDict()
 
         optionDict = {'1' : [self.startScapySniff, 'Capture traffic using Scapy'],
-                      '2' : [self.show, 'Capture traffic using TCPDump'], 
+                      '2' : [self.startTCPDumpSniff, 'Capture traffic using TCPDump'], 
                       '3' : [self.threadControl, 'Show and control the traffic capturing threads'],
                       '4' : [self.stop, 'Display the contents of a packet capture (pcap file)'],
                       '5' : [self.stop, 'Stop'],
