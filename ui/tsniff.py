@@ -1,12 +1,13 @@
-from configparser import NoOptionError
 from threading import Thread
 from collections import OrderedDict
 #from core.bootstrap import bootstrap
 #from utils.menuOptValidator import menuOptValidator
 from scapy.all import *
 from time import sleep
+from datetime import datetime
 #from utils.uiUtils import clearConsole, titleFormatter
 from os import system
+from subprocess import PIPE
 
 ##################################################################################################################
 def menuOptValidator(text, menu, showMenu = False, title = (None, None), allowEmpty = True, clearUI = None):
@@ -57,7 +58,7 @@ def titleFormatter(title, level):
 
 class sniffThCreator(Thread):
     
-    def __init__(self, iface=None, sniffOptions=None):
+    def __init__(self, iface=None, sniffOptions=None, sniffType=None):
         Thread.__init__(self)
         self.currentPktID = 0
         self.iface = iface
@@ -65,20 +66,78 @@ class sniffThCreator(Thread):
         self.stopFlag = Event()
         self.pktBuffer = {}
         #self.sniffResults = None
+        self.sniffType = sniffType
         
     def scapyAsyncCallback(self, pkt):
         self.currentPktID += 1
         self.pktBuffer[self.currentPktID] = pkt
         
     def scapySniffer(self):
+        '''
         self.asyncThread = AsyncSniffer(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
         self.asyncThread.start()
         print('started capturing')
+        '''
+        try:
+            asyncThread = AsyncSniffer(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
+            asyncThread.start()
+            while True:
+                sleep(2)
+                if len(self.pktBuffer) > 120000:
+                    print('I DELETED')
+                    self.pktBuffer = {}
+                '''
+                if not asyncThread.running:
+                    self.sniffResults = asyncThread.results
+                    break
+                if self.stopFlag.is_set():
+                    asyncThread.stop()
+                    self.sniffResults = asyncThread.results
+                    break
+                '''
+                if not asyncThread.running or self.stopFlag.is_set():
+                    self.sniffResults = asyncThread.results
+                    break
+        except Exception as err:
+            asyncThread.stop()
+            logging.error(err)
     
     def tcpdumpSniffer(self):
-        self.Async
+        command = ['tcpdump']#, '-e', '--number','--print', '-i', self.iface]
+        if 'write_to_file' in self.sniffOptions and self.sniffOptions['write_to_file'] == 'yes':
+            command.extend(['-w', self.sniffOptions[f'./temp/{str(datetime.now().time())}.pcap']])
+        if 'count' in self.sniffOptions:
+            command.extend(['-c', self.sniffOptions['count']])
+        if 'direction' in self.sniffOptions:
+            command.append(f"--direction={self.sniffOptions['direction']}")
+        if 'verify_checksums' in self.sniffOptions and self.sniffOptions['verify_checksums'] == 'no':
+            command.append('--dont-verify-checksums')
+        if 'verbose_level' in self.sniffOptions:
+            command.append('-'+'v'*int(self.sniffOptions['verbose_level']))
+        command.extend(['-e', '--number','--print', '-i', self.iface])
+        if 'filter' in self.sniffOptions:
+            command.append(self.sniffOptions['filter'])
+        try:
+            sniffProc = subprocess.Popen(command,  stderr=PIPE)
+            while not self.stopFlag.is_set():
+                if sniffProc.poll() != None:
+                    break
+                sleep(1)
+            sniffProc.send_signal(subprocess.signal.SIGINT)
+            sleep(2)
+            error = sniffProc.communicate()[1].decode('UTF-8')
+            if error:
+                raise Exception(error)           
+        except Exception as err:
+            sniffProc.terminate()
+            logging.error(err)
 
     def run(self):
+        if self.sniffType == 'Scapy':
+            self.scapySniffer()
+        elif self.sniffType == 'TCPDump':
+            self.tcpdumpSniffer()
+        '''
         try:
             self.scapySniffer()
             while True:
@@ -97,6 +156,7 @@ class sniffThCreator(Thread):
         except Exception as err:
             self.asyncThread.stop()
             logging.error(err)
+        '''
 
 class tSniff(object):
         
@@ -106,7 +166,7 @@ class tSniff(object):
     def __init__(self):
         self.threadsDict = OrderedDict()
         self.os = 'Windows'############ sterge
-        self.ifacesDict = {'1': 'Hyper-V Virtual Ethernet Adapter #2'}
+        self.ifacesDict = {'1': 'Intel(R) Wi-Fi 6 AX200 160MHz'}
 
     def resourceLoader(self):
         if 'environment' not in bootstrap.resources:
@@ -123,14 +183,21 @@ class tSniff(object):
 
     def parseThreadOptions(self, options):
         optionsDict = {}
-        for option, type in options.items():
-            while True:
-                userInput = input(f'Choose a value for \'{option}\' (empty is default): ')
+        for option, response in options.items():
+            while True:     
+                userInput = input(f'Choose a value for \'{option}\' {response} (empty is default): ')
                 if not userInput:
                     break
                 try:
-                    optionsDict[option] = type(userInput)
-                    break
+                    if isinstance(response, list):
+                        if not userInput in response:
+                            print(f'Invalid input {userInput}. Please retry')
+                            continue
+                        optionsDict[option] = userInput
+                        break
+                    else:
+                        optionsDict[option] = response(userInput)
+                        break
                 except:
                     print(f'Invalid input {userInput}. Please retry')
                     continue
@@ -150,7 +217,7 @@ class tSniff(object):
         selectedIface = self.ifacesDict[userInput]
         
         options = {'count' : int, 'store': bool, 'filter': str, 'timeout': float }
-        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options))
+        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options), sniffType = 'Scapy')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread 
         logging.info(f'Capturing packets on interface {selectedIface}')
@@ -170,8 +237,8 @@ class tSniff(object):
 
         selectedIface = self.ifacesDict[userInput]
         
-        options = {'count' : int, 'store': bool, 'filter': str, 'timeout': float }
-        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options))
+        options = {'count' : int, 'verify_checksums':['yes','no'], 'direction': ['in','out','inout'], 'verbose_level': ['1','2','3'], 'write_to_file':['yes','no'], 'filter': str}
+        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options), sniffType = 'TCPDump')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread 
         logging.info(f'Capturing packets on interface {selectedIface}')
@@ -258,6 +325,9 @@ class tSniff(object):
             return
         except Exception as err:
             logging.error(err)
+            
+    def showTCPDumpRealtime(self):
+        pass
 
 
     
@@ -281,11 +351,24 @@ class tSniff(object):
             if not selectedThread:
                 return
 
-            optionDict = {'1' : [self.showRealtimeSummary, 'Display a summary of the captured packets in realtime'],
-                          '2' : [self.showRealtimeVerbose, 'Display the whole content of the captured packets in realtime'],
+#            optionDict = {'1' : [self.showRealtimeSummary, 'Display a summary of the captured packets in realtime'],
+#                          '2' : [self.showRealtimeVerbose, 'Display the whole content of the captured packets in realtime'],
+#                          '3' : [self.saveCapture, 'Save the capture in a file'],
+#                          '4' : [self.stopThread, 'Stop thread\'s execution'],
+#                          '5' : [self.removeThread, 'Remove this thread']}
+            
+            if self.threadsDict[selectedThread].sniffType == 'Scapy':
+                optionDict = {'1' : [self.showRealtimeSummary, 'Display a summary of the captured packets in realtime'],
+                              '2' : [self.showRealtimeVerbose, 'Display the whole content of the captured packets in realtime'],
                           '3' : [self.saveCapture, 'Save the capture in a file'],
                           '4' : [self.stopThread, 'Stop thread\'s execution'],
                           '5' : [self.removeThread, 'Remove this thread']}
+            else:
+                optionDict = {'1' : [self.showTCPDumpRealtime, 'Display the captured packets in realtime'],
+                              '2' : [self.saveCapture, 'Save the capture in a file'],
+                              '3' : [self.stopThread, 'Stop thread\'s execution'],
+                              '4' : [self.removeThread, 'Remove this thread']}
+                
 
             while True:
 
@@ -358,3 +441,4 @@ class tSniff(object):
 a = tSniff()
 a.launch()
 #a.parseThreadOptions()
+#print(a)

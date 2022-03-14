@@ -12,3 +12,19 @@ class helloMeBoyz(object):
 a = helloMeBoyz()
 
 logging.info('hello')
+
+'''
+        optionsDict = {}
+        for option, type in options.items():
+            while True:
+                userInput = input(f'Choose a value for \'{option}\' (empty is default): ')
+                if not userInput:
+                    break
+                try:
+                    optionsDict[option] = type(userInput)
+                    break
+                except:
+                    print(f'Invalid input {userInput}. Please retry')
+                    continue
+        return optionsDict
+        '''
