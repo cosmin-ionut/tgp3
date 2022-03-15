@@ -1,4 +1,7 @@
 import logging
+import signal
+import threading
+
 class bootstrap(object):
 
     resources = {} # resources returned by various modules. This is the central point from where resources will be fetched by any module.
@@ -27,13 +30,25 @@ class bootstrap(object):
                     continue
                 name, resource = coreMod().launch()
                 cls.resources[name] = resource
-            return ui.launch()  
+            ui.launch()
+            #cls.resourceRelease() 
         except KeyboardInterrupt:
+            #cls.resourceRelease()
             logging.info('The application has been closed at user\'s request')
             exit(1)
         except Exception as err:
+            #cls.resourceRelease()
             logging.critical(f'Application cannot continue: {err}')
             exit(1)
+    
+    @classmethod
+    def resourceMonitor(cls):
+        pass
+    
+    #def resourceRelease(cls):
+    #    for thread in threading.enumerate():
+    #        if thread.is_alive():
+    #            thread.
                 
 # Flow:
 # all enabled features in run.py will be sent her. They will be sorted into uiModules and coreModules.
