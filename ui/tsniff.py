@@ -7,7 +7,7 @@ from time import sleep
 from datetime import datetime
 #from utils.uiUtils import clearConsole, titleFormatter
 from os import system
-from subprocess import PIPE
+from subprocess import Popen, PIPE, signal
 
 ##################################################################################################################
 def menuOptValidator(text, menu, showMenu = False, title = (None, None), allowEmpty = True, clearUI = None):
@@ -118,18 +118,18 @@ class sniffThCreator(Thread):
         if 'filter' in self.sniffOptions:
             command.append(self.sniffOptions['filter'])
         try:
-            sniffProc = subprocess.Popen(command,  stderr=PIPE)
+            self.sniffProc = Popen(command, stdout=PIPE,  stderr=PIPE)
             while not self.stopFlag.is_set():
-                if sniffProc.poll() != None:
+                if self.sniffProc.poll() != None:
                     break
                 sleep(1)
-            sniffProc.send_signal(subprocess.signal.SIGINT)
+            self.sniffProc.send_signal(signal.SIGINT)
             sleep(2)
-            error = sniffProc.communicate()[1].decode('UTF-8')
+            error = self.sniffProc.communicate()[1].decode('UTF-8')
             if error:
                 raise Exception(error)           
         except Exception as err:
-            sniffProc.terminate()
+            self.sniffProc.terminate()
             logging.error(err)
 
     def run(self):
@@ -326,10 +326,15 @@ class tSniff(object):
         except Exception as err:
             logging.error(err)
             
-    def showTCPDumpRealtime(self):
-        pass
-
-
+    def showTCPDumpRealtime(self, threadID):
+        try:
+            if self.threadsDict[threadID].is_alive():
+                for line in iter(self.threadsDict[threadID].sniffProc.stdout.readline, ''):
+                    print(line)
+            else:
+                logging.info('The thread selected is not running')
+        except KeyboardInterrupt:
+            return
     
     def threadControl(self):
         while True:
