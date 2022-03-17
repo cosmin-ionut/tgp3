@@ -3,7 +3,7 @@ import os
 def getCaps():
     
     capDict = {}
-    files = os.listdir('./temp')
+    files = os.listdir('./captures')
     capList = [file for file in files if file.endswith('.pcap')]
     i = 100
     for file in capList:
