@@ -3,7 +3,7 @@ from platform import system
 from re import findall
 from sys import version_info
 from importlib import util
-from subprocess import Popen, check_output
+from subprocess import Popen, check_output, PIPE
 
 class environment(object):
 
@@ -46,17 +46,17 @@ class environment(object):
     
     def checkTCPDump(self):
         try:
-            Popen(['tcpdump', '--h'])
+            Popen(['tcpdump', '--h'], stdout=PIPE, stderr=PIPE)
             return True
         except:
             return False
-            
+
     def checkTCPReplay(self):
         try:
-            Popen(['tcpreplay', '-V'])
+            Popen(['tcpreplay', '-V'], stdout=PIPE, stderr=PIPE)
             return True
         except:
-            return False 
+            return False
 
     def launch(self):
         try:
