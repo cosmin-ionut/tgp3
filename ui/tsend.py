@@ -1,11 +1,9 @@
 import logging
-#import signal
 from subprocess import PIPE, Popen
 from collections import OrderedDict
 from scapy.all import *
 from threading import Thread
 from time import sleep
-from math import ceil
 from utils.menuOptValidator import menuOptValidator
 from utils.uiUtils import clearConsole, titleFormatter
 from utils.getCaps import getCaps
@@ -20,47 +18,37 @@ class sendThCreator(Thread):
         self.stopFlag = Event()
         self.daemon = True
         self.error = None
-        self.sentCount = 0
+        self.sentCount = 'undefined'
         self.sendFunction = sendFunction
         self.iface = iface
         self.trafficID = trafficID
+  
+    def getId(self):
+        if hasattr(self, '_thread_id'):
+            return self._thread_id
+        for id, thread in threading._active.items():
+            if thread is self:
+                return id
+
+    def scapyStop(self):
+        thread_id = self.getId()
+        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(KeyboardInterrupt))
+        if resu > 1: 
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
+            logging.error('Failure in stopping the thread')
 
     def scapySend(self):
         try:
-            sendOptions = self.sendOptions
-            checkCount = 600 #the stop thread condition is checked every 600 packets sent.
-
-            if 'inter' in sendOptions and float(sendOptions['inter']) != float(0):
-                checkCount = ceil((1 / float(sendOptions['inter']))*3)
-
-            # if the loop is true, then check the stop condition every
-            if 'loop' in sendOptions and bool(sendOptions['loop']):
-                sendOptions['count'] = checkCount
-                while not self.stopFlag.is_set():
-                    sendp(self.pkt, iface=self.iface, verbose = 0, **sendOptions)
-                    self.sentCount += checkCount
-                return
-
-            if 'count' in sendOptions:
-                totalCount = int(sendOptions['count'])
-                if totalCount <= checkCount:
-                    sendp(self.pkt, self.iface, verbose = 0, **sendOptions)
-                    self.sentCount = totalCount
-                    return
-                else:
-                    self.sentCount = 0
-                    sendOptions['count'] = checkCount
-                    while not self.stopFlag.is_set() and checkCount < totalCount:
-                        sendp(self.pkt, iface=self.iface, verbose = 0, **sendOptions)
-                        totalCount = totalCount - checkCount
-                        self.sentCount += checkCount
-                    sendOptions['count'] = totalCount
-                    sendp(self.pkt, iface=self.iface, verbose = 0, **sendOptions)
-                    self.sentCount += totalCount
-                    return
-        except Exception as err:
-            logging.error(f'Error occured in the traffic send thread. Error: {err}')
+            if 'loop' not in self.sendOptions or 'loop' in self.sendOptions and self.sendOptions['loop'] == 'no':
+                self.sendOptions['loop'] = False
+            else:
+                self.sendOptions['loop'] = True
+            self.sentCount = len(sendp(self.pkt, iface=self.iface, verbose = 0, return_packets = True, **self.sendOptions))
+        except KeyboardInterrupt:
             return
+        except Exception as err:
+            logging.error(err)
+            self.error = err
 
     def sendTCPReplay(self):
 
@@ -80,12 +68,12 @@ class sendThCreator(Thread):
         command.append(self.pkt)
         ###### CALL TCPREPLAY, POPULATE THREAD INFO AND TRY TO CATCH THE ERRORS ########
         try:
-            sendProc = subprocess.Popen(command, stdout=PIPE, stderr=PIPE)
+            sendProc = Popen(command, stdout=PIPE, stderr=PIPE)
             while not self.stopFlag.is_set():
                 if sendProc.poll() != None:
                     break
                 sleep(1)
-            sendProc.send_signal(subprocess.signal.SIGINT)
+            sendProc.terminate()
             sleep(2)
             results = sendProc.communicate()[0].decode('UTF-8')
             error = sendProc.communicate()[1].decode('UTF-8')
@@ -100,10 +88,13 @@ class sendThCreator(Thread):
 
     ################# THREADS'S RUN FUNCTION #####################################
     def run(self):
+        try:
             if self.sendFunction == 'Scapy':
                 self.scapySend()
             elif self.sendFunction == 'TCPReplay':
                 self.sendTCPReplay()
+        except:
+            logging.info('Exception occured')
 
 class tSend(object):
 
@@ -161,7 +152,7 @@ class tSend(object):
         if int(ui) < 100:
             self.pkts[ui].show2()
         else:
-            for pkt in rdpcap(f'./temp/{self.pkts[ui]}'):
+            for pkt in rdpcap(f'./captures/{self.pkts[ui]}'):
                 print(pkt.summary())
 
     def setThreadIndex(self):
@@ -173,15 +164,25 @@ class tSend(object):
 
     def parseThreadOptions(self, options):
         optionsDict = {}
-        for option in options:
-            userInput = input(f'Choose a value for \'{option}\' (empty is default): ')
-            if not userInput:
-                continue
-            try:
-                optionsDict[option] = float(userInput)
-            except ValueError:
-                optionsDict[option] = userInput
-        self.sendOptions = optionsDict
+        for option, response in options.items():
+            while True:
+                userInput = input(f'Choose a value for \'{option}\' {response} (empty is default): ')
+                if not userInput:
+                    break
+                try:
+                    if isinstance(response, list):
+                        if not userInput in response:
+                            print(f'Invalid input {userInput}. Please retry')
+                            continue
+                        optionsDict[option] = userInput
+                        break
+                    else:
+                        optionsDict[option] = response(userInput)
+                        break
+                except:
+                    print(f'Invalid input {userInput}. Please retry')
+                    continue
+        return optionsDict
 
     def startScapyThread(self):
 
@@ -194,7 +195,7 @@ class tSend(object):
         if int(userTrInp) < 100:
             selectedTraffic = self.pkts[userTrInp]
         elif int(userTrInp) >= 100:
-            selectedTraffic = rdpcap(f'./temp/{self.pkts[userTrInp]}')
+            selectedTraffic = rdpcap(f'./captures/{self.pkts[userTrInp]}')
 
    ############ CHOOSE THE SENDING INTERFACE OR EXIT ######################
 
@@ -206,11 +207,9 @@ class tSend(object):
             return
 
         selectedIface = self.ifacesDict[userInput]
-
-        options = ['inter', 'loop', 'count', 'realtime']
-        self.parseThreadOptions(options)
-
-        thread = sendThCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'Scapy')
+        options = {'inter' : float, 'loop': ['yes','no'], 'count': int, 'realtime': ['yes','no']}
+        
+        thread = sendThCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.parseThreadOptions(options), sendFunction = 'Scapy')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
@@ -222,10 +221,10 @@ class tSend(object):
         if not userTrInp:
             return
         if int(userTrInp) < 100:
-            wrpcap('./temp/tcp_rep_sp.pcap', self.pkts[userTrInp])
-            selectedTraffic = './temp/tcp_rep_sp.pcap'
+            wrpcap('./captures/tcp_rep_sp.pcap', self.pkts[userTrInp])
+            selectedTraffic = './captures/tcp_rep_sp.pcap'
         elif int(userTrInp) >= 100:
-            selectedTraffic = f'./temp/{self.pkts[userTrInp]}'
+            selectedTraffic = f'./captures/{self.pkts[userTrInp]}'
 
         userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
                                      menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
@@ -251,7 +250,7 @@ class tSend(object):
                   f'Error encountered: {self.threadsDict[threadID].error} \n' \
                   f'Packet\Capture ID: {self.threadsDict[threadID].trafficID} \n' \
                   f'Sending interface: {self.threadsDict[threadID].iface} \n'
-                  f'Number of packets sent: {self.threadsDict[threadID].sentCount} \n'
+                  f'Send results: {self.threadsDict[threadID].sentCount} \n'
                   f'Send Type: {self.threadsDict[threadID].sendFunction} \n' \
                   f'Send Options: {self.threadsDict[threadID].sendOptions}')
         except Exception as err:
@@ -267,16 +266,20 @@ class tSend(object):
                 logging.info(f'Thread ID: {threadID} has been deleted successfully.')
         except Exception:
             logging.error(f'You cannot take this action. Thread ID: {threadID} does not exist')
-
+    
     def stopThread(self, threadID):
         try:
             if self.threadsDict[threadID].is_alive():
                 inter = 3
-                if 'inter' in self.threadsDict[threadID].sendOptions:
-                    inter = int(self.threadsDict[threadID].sendOptions['inter']) + 3
-                logging.info(f'Thread ID: {threadID} will be stopped in {inter} seconds.')
-                self.threadsDict[threadID].stopFlag.set()
-                sleep(inter)
+                if self.threadsDict[threadID].sendFunction == 'Scapy':
+                     self.threadsDict[threadID].scapyStop()
+                else:
+                    self.threadsDict[threadID].stopFlag.set()
+                i = 1
+                while i <= 3 and self.threadsDict[threadID].is_alive():
+                    logging.info(f'Stopping thread ID: {threadID}...attempt number {i}.')
+                    sleep(3)
+                    i += 1
                 if self.threadsDict[threadID].is_alive():
                     logging.error(f'Thread ID: {threadID} termination failed! Please try again')
                     raise
@@ -319,7 +322,7 @@ class tSend(object):
                 threadAction = menuOptValidator(text = 'Select an action for this thread (empty to exit): ',
                                                 menu = optionDict, showMenu = True, clearUI = self.os, allowEmpty=True,
                                                 title = (f'SEND TRAFFIC >> Show and control the sending threads' \
-                                                ' >> Thread ID {selectedThread} >> Actions you can take', 3))
+                                                f' >> Thread ID {selectedThread} >> Actions you can take', 3))
                 if not threadAction:
                     return
 
@@ -364,5 +367,3 @@ class tSend(object):
         except Exception as err:
             logging.critical(f'Module exiting... Error: {err}')
             raise
-
-# foloseste self.error pentru a verifica in functiile de meniu daca nu cumva exista erori.
