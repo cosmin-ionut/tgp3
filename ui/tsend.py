@@ -61,8 +61,8 @@ class sendThCreator(Thread):
         else:
             command.append(f"--topspeed")
 
-        if 'loop' in self.sendOptions:
-            command.append(f"--loop={int(self.sendOptions['loop'])}")
+        if 'count' in self.sendOptions:
+            command.append(f"--loop={int(self.sendOptions['count'])}")
         else:
             command.append("--loop=1")
         command.append(self.pkt)
@@ -108,8 +108,6 @@ class tSend(object):
         return cls._instance
 
     def __init__(self):
-        self.lastScapyConfig = None
-        self.lastTcpReplayConfig = None
         self.threadsDict = OrderedDict()
 
     def resourceLoader(self):
@@ -128,15 +126,7 @@ class tSend(object):
             self.pkts = captures
         self.ifacesDict = bootstrap.resources['environment']['ifaces']
         self.os = bootstrap.resources['environment']['os']
-
-    def useLastConfig(self, type):
-
-        pass
-        #if type == 'Scapy' and self.lastScapyConfig:
-        #    print('A previously used Scapy send configuration has been found')
-        #
-        #    useLast = input('W')
-        # DE TERMINAT MANANA
+        self.tcpdump = bootstrap.resources['environment']['tcpdump']
 
     def showAvailablePackets(self):
         clearConsole(self.os)
@@ -215,6 +205,12 @@ class tSend(object):
         logging.info('The sending thread has been started')
 
     def startTCPReplayThread(self):
+        if not self.tcpdump:
+            clearConsole(self.os)
+            print(titleFormatter('SEND TRAFFIC >> Send traffic using TCPReplay', level=3))
+            logging.info('TCPDump is not available on this machine. Cannot proceed!')
+            return
+
         userTrInp = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
                                      title = ('SEND TRAFFIC >> Send traffic using TCPReplay >> Choose a packet to send', 2),
                                      clearUI = self.os, allowEmpty=True)
@@ -233,10 +229,10 @@ class tSend(object):
         if not userInput:
             return
         selectedIface = self.ifacesDict[userInput]
-        options = ['pps', 'mbps', 'loop']
-        self.parseThreadOptions(options)
 
-        thread = sendThCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.sendOptions, sendFunction = 'TCPReplay')
+        options = {'pps':int, 'mbps':int, 'count':int}
+
+        thread = sendThCreator(pkt = selectedTraffic, trafficID = userTrInp, iface = selectedIface, sendOptions = self.parseThreadOptions(options), sendFunction = 'TCPReplay')
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info('The sending thread has been started')
@@ -260,17 +256,21 @@ class tSend(object):
         try:
             if self.threadsDict[threadID].is_alive():
                 logging.error(f'You cannot delete a running thread. Thread ID: {threadID} is still running')
-                return
+                return False
             del(self.threadsDict[threadID])
+            sleep(1)
             if threadID not in self.threadsDict:
                 logging.info(f'Thread ID: {threadID} has been deleted successfully.')
-        except Exception:
-            logging.error(f'You cannot take this action. Thread ID: {threadID} does not exist')
+                return True
+            else:
+                raise 
+        except Exception as err:
+            logging.error(f'Error occured during thread removal. Error: {err}')
+            return False
     
     def stopThread(self, threadID):
         try:
             if self.threadsDict[threadID].is_alive():
-                inter = 3
                 if self.threadsDict[threadID].sendFunction == 'Scapy':
                      self.threadsDict[threadID].scapyStop()
                 else:
@@ -285,13 +285,34 @@ class tSend(object):
                     raise
                 elif not self.threadsDict[threadID].is_alive():
                     print(f'Thread ID: {threadID}\'s execution has been stopped')
-                    return
+                    return True
             else:
                 logging.info(f'Thread ID: {threadID} is not executing.')
-                return
+                return True
         except Exception as err:
             logging.error(f'Error occured during thread termination. Error: {err}')
+            return False
+    
+    def restartThread(self, threadID):
+
+        selectedTraffic = self.threadsDict[threadID].pkt
+        sendOptions = self.threadsDict[threadID].sendOptions
+        trafficID = self.threadsDict[threadID].trafficID
+        iface = self.threadsDict[threadID].iface
+        sendFunction = self.threadsDict[threadID].sendFunction
+
+        if not self.stopThread(threadID):
+            logging.error(f'Failed to restart thread\'s {threadID} execution')
             return
+        
+        if not self.removeThread(threadID):
+            logging.error(f'Failed to restart thread\'s {threadID} execution')
+            return
+
+        thread = sendThCreator(pkt = selectedTraffic, trafficID = trafficID, iface = iface, sendOptions = sendOptions, sendFunction = sendFunction)
+        thread.start()
+        self.threadsDict[threadID] = thread
+        logging.info(f'Thread ID {threadID} has been restarted')
 
     def threadControl(self):
         while True:
@@ -315,7 +336,8 @@ class tSend(object):
 
             optionDict = {'1' : [self.showThreadInfo, 'Show information about the thread'],
                           '2' : [self.stopThread, 'Stop thread\'s execution'],
-                          '3' : [self.removeThread, 'Remove this thread']}
+                          '3' : [self.restartThread, 'Restart thread\'s execution'],
+                          '4' : [self.removeThread, 'Remove this thread']}
 
             while True:
 

@@ -8,6 +8,8 @@ import logging
 class craft(object):
     
     _instance = None
+    hasUI = True
+    showUIMenu = "Packet Crafting"
     
     def __new__(cls): # singleton. Make sure there can be only one craft object and use that
         if cls._instance is None:
@@ -17,10 +19,6 @@ class craft(object):
     def __init__(self):
         self.pkt = ''
         self.pktList = {}
-        #self.exitMenu = False
-
-    hasUI = True
-    showUIMenu = "Packet Crafting"
     
     def resourceLoader(self):
         if 'environment' not in bootstrap.resources:
@@ -28,6 +26,11 @@ class craft(object):
         self.os = bootstrap.resources['environment']['os']
     
     def showPacketDetails(self):
+        '''- Displays the specifics of a header, which is the fields that can be modified.\n''' \
+        '''- It is case sensitive.\n''' \
+        '''- The header has to be typed exactly as returned by options 1 or 3 of Packet Crafting module.\n''' \
+        '''- It has the same functionality as scapy's ls(Header) function'''
+
         uiError = ''
         while True:
             clearConsole(self.os)
@@ -44,6 +47,11 @@ class craft(object):
                 continue
 
     def searchPacket(self):
+        '''- Allows you to search for a specific header.\n''' \
+        '''- Takes your input and displays all matching headers.\n''' \
+        '''- Not case sensitive.\n''' \
+        '''- It has the same functionality as scapy's ls("Header") function'''
+
         uiError = ''
         while True:
             clearConsole(self.os)
@@ -59,35 +67,38 @@ class craft(object):
                 except:
                     continue
 
-    def addLayer(self):
+    def addHeader(self):
         clearConsole(self.os)
-        print(titleFormatter('PACKET CRAFTING >> Craft a packet that you can send >> Add Layer', level=3))
+        print(titleFormatter('PACKET CRAFTING >> Craft a packet that you can send >> Add Header', level=3))
         print(self.craftOutput)
-        userLayer = input('Type what layer you want to add to the packet (empty to quit): ')  # takes the user's input regarding a layer to add to the packet (Ether, IP, etc.)
-        if hasattr(scapy.all, userLayer):    #verifies that the layer exists in scapy and if it does, starts building the layer (populating the fields)
+        userHeader = input('Type what header you want to add to the packet (empty to quit): ')
+        if hasattr(scapy.all, userHeader):
             if self.pkt == "":
-                layer = userLayer + "("
+                header = userHeader + "("
             else:
-                layer = "/" + userLayer + "("
-            fields = (eval('%s()' % userLayer).show(dump = True)).split('\n')
+                header = "/" + userHeader + "("
+            fields = (eval('%s()' % userHeader).show(dump = True)).split('\n')
             fields = [field[0:field.find('=')].strip().replace('\\', '') for field in fields if "#" not in field and field != '']
             for field in fields:
-                userValueForField = input("Enter a value for %s's '%s' field (empty for default): " % (userLayer, field))
+                userValueForField = input("Enter a value for %s's '%s' field (empty for default): " % (userHeader, field))
                 if userValueForField != '':
-                    layer = layer + "%s='%s'" % (field, userValueForField)
-                    layer = layer + ','
-            if layer[-1] == ",":
-                layer = layer[0:-1] + ')'
+                    try:
+                        userValueForField = int(userValueForField)
+                        header = header + "%s=%s" % (field, userValueForField)
+                    except:
+                        header = header + "%s='%s'" % (field, userValueForField)
+                    header = header + ','
+            if header[-1] == ",":
+                header = header[0:-1] + ')'
             else:
-                layer = layer + ')'
-            self.pkt = self.pkt + layer
-            self.craftOutput = 'Layer added succesfully!'
+                header = header + ')'
+            self.pkt = self.pkt + header
+            self.craftOutput = 'Header added succesfully!'
             return False
-        elif userLayer == "": #True booleans stop the creation of the packet. So if the user enters nothing when asked about a layer, the packet creation process stops
+        elif userHeader == "": #True booleans stop the creation of the packet. So if the user enters nothing when asked about a header, the packet creation process stops
             return True
         else:
-            self.craftOutput = f"The layer '{userLayer}' is incorrect. Layers are case-sensitive. Try again"
-            #print (f"The layer {userLayer} is either incorrect or not yet available. Try again")
+            self.craftOutput = f"The header '{userHeader}' is incorrect. Headers are case-sensitive. Try again"
             return False
 
     def setIndex(self):
@@ -104,24 +115,33 @@ class craft(object):
             print(uiError)
             userBytesNumber = input('Payload size in bytes? ')
             try:   
-                payloadLayer = "/Raw(load=RandBin({}))".format(int(userBytesNumber))
+                payloadHeader = "/Raw(load=RandBin({}))".format(int(userBytesNumber))
                 break
             except:
                 uiError = 'Invalid input! Please try again!'
-        self.pkt = self.pkt + payloadLayer
+        self.pkt = self.pkt + payloadHeader
         print(f'The payload of {userBytesNumber} bytes has been added to the packet.')
 
     def craft(self):
+        '''- Starts the packet building process.\n''' \
+        '''- Asks you what headers should be added to the packet, and asks for values for the specific fields.\n''' \
+        '''- The headers are case-sensitive\n''' \
+        '''- When you are done adding heades to the packet, you will be asked to specify the payload size in bytes.\n''' \
+        '''- When the whole process is done, the built packet will be validated.'''
+
         self.craftOutput = ''
         try:
             self.pkt = ''
-            while not self.addLayer():
+            while not self.addHeader():
                 pass
             if self.pkt != '':
                 self.addRawLoad()
                 self.pkt = eval(self.pkt)
                 self.pkt.show2()
                 index = self.setIndex()
+                if int(index) >= 100:
+                    logging.error('There are too many crafted packets. You must remove some of them before creating others')
+                    return
                 self.pktList[index] = self.pkt
                 print(f'Packet number {index} has been created')   
             return
@@ -130,11 +150,18 @@ class craft(object):
             return
 
     def existingPkt(self):
+        '''- Displays a summary of all the already crafted packets.\n''' \
+        '''- Allows you to see the details for each packet.\n''' \
+        '''- Checking the details of the packet, will also validate its content.\n''' \
+        '''- The validation checks the details of each header, and, to some degree, the compatibility of each header with one another.'''
+
         clearConsole(self.os)
         print(titleFormatter('PACKET CRAFTING >> Validate and show a currently existing packet', level=3))
         if len(self.pktList) != 0:
             try:
                 for k,v in self.pktList.items():
+                    if int(k) >= 100:
+                        continue
                     print(f'Packet ID {k} : {v.summary()}')
                 ui = menuOptValidator(text = 'Choose a packet ID (empty to exit): ', menu = self.pktList)
                 if not ui:
@@ -146,11 +173,15 @@ class craft(object):
             print ("\n Currently, there is no crafted packet \n")
 
     def removePkt(self):
+        '''- Displays a summary of all the already crafted packets and allows you to remove any of them.\n'''
+
         clearConsole(self.os)
         print(titleFormatter('PACKET CRAFTING >> Remove an existing packet', level=3))
         if len(self.pktList) != 0:
             try:
                 for k,v in self.pktList.items():
+                    if int(k) >= 100:
+                        continue
                     print(f'Packet ID {k} : {v.summary()}')
                 ui = menuOptValidator(text = 'Choose a packet ID (empty to exit): ', menu = self.pktList)
                 if not ui:
