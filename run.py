@@ -4,6 +4,7 @@ from core.ui import ui
 from ui.craft import craft
 from ui.tsend import tSend
 from ui.tsniff import tSniff
+from ui.manual import manual
 import logging
 
 logging.basicConfig(level=logging.DEBUG,
@@ -12,5 +13,5 @@ logging.getLogger('scapy.runtime').setLevel(logging.ERROR)
 
 # What you pass here are classes, not objects.
 # The application is object oriented and uses instances all over the place
-enabledFeatures = [ui, environment, craft, tSend, tSniff]
+enabledFeatures = [ui, environment, craft, tSend, tSniff, manual]
 bootstrap.loader(enabledFeatures)
