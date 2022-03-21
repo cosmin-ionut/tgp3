@@ -176,10 +176,18 @@ class tSend(object):
 
     def startScapyThread(self):
 
+        clearConsole(self.os)
+        print(titleFormatter('SEND TRAFFIC >> Send traffic using Scapy >> Choose a packet to send', level=3))
+
+        for k,v in self.pkts.items():
+            if int(k) < 100:
+                print(f'Packet ID {k} : {v.summary()}')
+            else:
+                print(f'Capture ID {k} : {v}')
+
     ########## CHOOSE THE PACKET TO SEND OR CAPTURE TO REPLAY.... OR EXIT #############
-        userTrInp = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
-                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose a packet to send', 2),
-                                     clearUI = self.os, allowEmpty=True)
+        userTrInp = menuOptValidator(text = 'Select the packet\capture to send: ', menu = self.pkts, showMenu = False, allowEmpty=True)
+
         if not userTrInp:
             return
         if int(userTrInp) < 100:
@@ -191,7 +199,7 @@ class tSend(object):
 
         userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
                                      menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
-                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending interface', 2))
+                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending interface', 3))
 
         if not userInput:
             return
@@ -205,15 +213,22 @@ class tSend(object):
         logging.info('The sending thread has been started')
 
     def startTCPReplayThread(self):
+        
+        clearConsole(self.os)
+        print(titleFormatter('SEND TRAFFIC >> Send traffic using TCPReplay >> Choose a packet to send', level=3))
+
         if not self.tcpdump:
-            clearConsole(self.os)
-            print(titleFormatter('SEND TRAFFIC >> Send traffic using TCPReplay', level=3))
             logging.info('TCPDump is not available on this machine. Cannot proceed!')
             return
+        
+        for k,v in self.pkts.items():
+            if int(k) < 100:
+                print(f'Packet ID {k} : {v.summary()}')
+            else:
+                print(f'Capture ID {k} : {v}')
 
-        userTrInp = menuOptValidator(text = 'Select the packet\capture to send:', menu = self.pkts, showMenu = True,
-                                     title = ('SEND TRAFFIC >> Send traffic using TCPReplay >> Choose a packet to send', 2),
-                                     clearUI = self.os, allowEmpty=True)
+        userTrInp = menuOptValidator(text = 'Select the packet\capture to send: ', menu = self.pkts, showMenu = False, allowEmpty=True)
+
         if not userTrInp:
             return
         if int(userTrInp) < 100:
@@ -224,7 +239,7 @@ class tSend(object):
 
         userInput = menuOptValidator(text = 'Choose the interface to send traffic (empty to exit): ',
                                      menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
-                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending interface', 2))
+                                     title = ('SEND TRAFFIC >> Send traffic using Scapy >> Choose sending interface', 3))
 
         if not userInput:
             return
@@ -355,6 +370,13 @@ class tSend(object):
     def exitModule(self):
         self.exitMenu = True
 
+    def showThreads(self):
+        for thread in threading.enumerate():
+            if thread.is_alive():
+                print(f'{thread.ident} is alive')
+            else:
+                print(f'{thread.ident} is dead')
+
     def menuOptions(self):
 
         optionDict = OrderedDict()
@@ -363,6 +385,7 @@ class tSend(object):
                       '2' : [self.startScapyThread, 'Send traffic using Scapy'],
                       '3' : [self.startTCPReplayThread, 'Send traffic using TCPReplay'],
                       '4' : [self.threadControl, 'Show and control the sending threads'],
+                      '8' : [self.showThreads, 'Show threads'],
                       '9' : [self.exitModule, 'Return to Main Menu']}
 
         while not self.exitMenu:
