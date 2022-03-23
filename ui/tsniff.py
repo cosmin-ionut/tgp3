@@ -28,10 +28,11 @@ class sniffThCreator(Thread):
 
     def scapySniffer(self):
         try:
-            if 'store' not in self.sniffOptions or 'store' in self.sniffOptions and self.sniffOptions['store'] == 'no':
-                self.sniffOptions['store'] = False
-            else:
+            if 'store' in self.sniffOptions and (self.sniffOptions['store'] == 'yes' or self.sniffOptions['store'] == True):
                 self.sniffOptions['store'] = True
+            else:
+                self.sniffOptions['store'] = False
+
             asyncThread = AsyncSniffer(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
             asyncThread.start()
             while True:
@@ -39,7 +40,8 @@ class sniffThCreator(Thread):
                 if self.stopFlag.is_set():
                     asyncThread.stop()
                     del(self.pktBuffer)
-                    if self.sniffOptions['store']:
+                    if self.sniffOptions['store'] == True:
+                        print('we will store')
                         wrpcap(self.capname, asyncThread.results)
                     break
                 if not asyncThread.running:
@@ -134,6 +136,13 @@ class tSniff(object):
         return optionsDict
 
     def startScapySniff(self):
+        '''- Allows you to capture the traffic on an interface using Scapy\'s AsyncSniffer.\n''' \
+        '''- You will be prompted to choose the interface and various other Scapy specific parameters.\n''' \
+        '''- The specific parameters are: "count" (number of packets to capture then stop), "store" (save the capture),\n''' \
+        '''  "filter" (the BPF syntax packet filter string), "timeout" (interval in seconds after which the capture will stop)'''
+        '''- If for the option 'store' you enter 'yes', then, the captured traffic will be saved in a pcap file.\n''' \
+        '''- When all the needed options are selected, a thread will be created and traffic will be captured.\n''' \
+        '''- AsyncSniffer performance limitations also apply to this implementation'''
 
         userInput = menuOptValidator(text = 'Choose an interface to capture traffic (empty to exit): ',
                                      menu = self.ifacesDict, showMenu = True, allowEmpty = True, clearUI = self.os,
@@ -150,6 +159,14 @@ class tSniff(object):
         logging.info(f'Capturing packets on interface {selectedIface}')
 
     def startTCPDumpSniff(self):
+        '''- Allows you to capture the traffic on an interface using TCPDump.\n''' \
+        '''- You will be prompted to choose the interface and various other TCPDump specific parameters.\n''' \
+        '''- The specific parameters are: "count" (number of packets to capture then stop), "verify_checksums" (accept only CRC valid frames or accept everything),\n''' \
+        '''  "direction" (capturing direction: ingress, egress or both), "verbose_level" (amount of information to display while monitoring the capture),\n''' \
+        '''  "write_to_file" (save the captured packets), "filter" (TCPDump filter string).\n''' \
+        '''- When all the needed options are selected, a thread will be created and traffic will be captured.\n''' \
+        '''- TCPDump limitations are also applicable.'''
+
         if not self.tcpdump:
             clearConsole(self.os)
             print(titleFormatter('CAPTURE TRAFFIC >> Capture traffic using TCPDump', level=3))
@@ -185,13 +202,34 @@ class tSniff(object):
                     raise
                 elif not self.threadsDict[threadID].is_alive():
                     print(f'Thread ID: {threadID}\'s execution has been stopped')
-                    return
+                    return True
             else:
                 logging.info(f'Thread ID: {threadID} is not executing.')
-                return
+                return True
         except Exception as err:
             logging.error(f'Error occured during thread termination. Error: {err}')
+            return False
+
+    def restartThread(self, threadID):
+
+        sniffType = self.threadsDict[threadID].sniffType
+        iface = self.threadsDict[threadID].iface
+        sniffOptions = self.threadsDict[threadID].sniffOptions
+
+        print(sniffType,iface, sniffOptions)
+
+        if not self.stopThread(threadID):
+            logging.error(f'Failed to restart thread\'s {threadID} execution')
             return
+        
+        if not self.removeThread(threadID):
+            logging.error(f'Failed to restart thread\'s {threadID} execution')
+            return
+
+        thread = sniffThCreator(iface = iface, sniffOptions = sniffOptions, sniffType = sniffType)
+        thread.start()
+        self.threadsDict[threadID] = thread
+        logging.info(f'Thread ID {threadID} has been restarted')
 
     def showRealtimeVerbose(self, threadID):
         clearConsole(self.os)
@@ -248,6 +286,13 @@ class tSniff(object):
             logging.error(err)
 
     def threadControl(self):
+        '''- Provides various actions related to the capturing threads, based on the tool used to capture traffic.\n''' \
+        '''- Verbose or summary realtime view of the captured traffic if using Scapy \n''' \
+        '''- Detailed realtime view (based on verbose level) of the captured traffic if using TCPDump.\n''' \
+        '''- You can restart a thread's execution. This won't interfere with the "capture save" option.\n''' \
+        '''- You can stop a thread's execution before its completion or when capturing for an indefinite amount of time.\n''' \
+        '''- You can remove a thread (and the information it holds but not saved captures) after its execution is finished'''
+
         while True:
             clearConsole(self.os)
             print(titleFormatter('CAPTURE TRAFFIC >> Show and control the traffic capturing threads', level=3))
@@ -270,12 +315,14 @@ class tSniff(object):
             if self.threadsDict[selectedThread].sniffType == 'Scapy':
                 optionDict = {'1' : [self.showRealtimeSummary, 'Display a summary of the captured packets in realtime'],
                               '2' : [self.showRealtimeVerbose, 'Display the whole content of the captured packets in realtime'],
-                              '3' : [self.stopThread, 'Stop thread\'s execution'],
-                              '4' : [self.removeThread, 'Remove this thread']}
+                              '3' : [self.restartThread, 'Restart thread\'s execution'],
+                              '4' : [self.stopThread, 'Stop thread\'s execution'],
+                              '5' : [self.removeThread, 'Remove this thread']}
             else:
                 optionDict = {'1' : [self.showTCPDumpRealtime, 'Display the captured packets in realtime'],
-                              '2' : [self.stopThread, 'Stop thread\'s execution'],
-                              '3' : [self.removeThread, 'Remove this thread']}
+                              '2' : [self.restartThread, 'Restart thread\'s execution'],
+                              '3' : [self.stopThread, 'Stop thread\'s execution'],
+                              '4' : [self.removeThread, 'Remove this thread']}
             while True:
 
                 threadAction = menuOptValidator(text = 'Select an action for this thread (empty to exit): ',
@@ -293,6 +340,8 @@ class tSniff(object):
         self.exitMenu = True
 
     def readpcap(self):
+        '''- Allows you to read the content of a pcap file using Scapy (summary view)'''
+
         try:
             captures =  getCaps()
             clearConsole(self.os)
@@ -318,7 +367,7 @@ class tSniff(object):
         try:
             if self.threadsDict[threadID].is_alive():
                 logging.error(f'You cannot delete a running thread. Thread ID: {threadID} is still running')
-                return
+                return False
             del(self.threadsDict[threadID])
             i = 1
             while threadID in self.threadsDict and i < 5:
@@ -326,10 +375,12 @@ class tSniff(object):
                 i += 1
             if threadID not in self.threadsDict:
                 logging.info(f'Thread ID: {threadID} has been deleted successfully.')
+                return True
             else:
                 raise Exception(f'Thread ID: {threadID} couldn\'t be removed.')
         except Exception as err:
             logging.error(f'Error: \'{err}\' occurred while trying to remove the thread')
+            return False
 
     def menuOptions(self):
 

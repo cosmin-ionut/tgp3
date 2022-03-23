@@ -129,14 +129,18 @@ class tSend(object):
         self.tcpdump = bootstrap.resources['environment']['tcpdump']
 
     def showAvailablePackets(self):
+        '''- Displays the traffic available for sending.\n''' \
+        '''- It might be either user crafted packets or packet captures.\n''' \
+        '''- Entering an ID displays detailed output about the packet or capture.'''
+
         clearConsole(self.os)
-        print(titleFormatter('SEND TRAFFIC >> Display the packets available to send', level=3))
+        print(titleFormatter('SEND TRAFFIC >> Display the traffic available to send', level=3))
         for k,v in self.pkts.items():
             if int(k) < 100:
                 print(f'Packet ID {k} : {v.summary()}')
             else:
                 print(f'Capture ID {k} : {v}')
-        ui = menuOptValidator(text = 'Choose a packet ID (empty to exit): ', menu = self.pkts)
+        ui = menuOptValidator(text = 'Choose a traffic ID (empty to exit): ', menu = self.pkts)
         if not ui:
             return
         if int(ui) < 100:
@@ -175,6 +179,13 @@ class tSend(object):
         return optionsDict
 
     def startScapyThread(self):
+        '''- Allows you to send traffic using Scapy.\n''' \
+        '''- You might send traffic on any interface, multiple interfaces at once.\n''' \
+        '''- It is also possible to send multiple traffic types on the same interface, at the same time.\n''' \
+        '''- You will be prompted to choose the traffic ID, interface and various other scapy specific parameters.\n''' \
+        '''- The specific parameters are: "inter" (interval between packets), "loop" (send indefinitely),\n''' \
+        '''  "count" (the number of packets to send), "realtime" (check if a packet was sent before sending the next).\n''' \
+        '''- When all the needed options are selected, a thread will be created and traffic will be sent.'''
 
         clearConsole(self.os)
         print(titleFormatter('SEND TRAFFIC >> Send traffic using Scapy >> Choose a packet to send', level=3))
@@ -213,6 +224,14 @@ class tSend(object):
         logging.info('The sending thread has been started')
 
     def startTCPReplayThread(self):
+        '''- Allows you to send traffic using TCPReplay.\n''' \
+        '''- You might send traffic on any interface, multiple interfaces at once.\n''' \
+        '''- It is also possible to send multiple traffic ID\'s on the same interface, at the same time.\n''' \
+        '''- You will be prompted to choose the traffic ID, interface and various other TCPReplay specific parameters.\n''' \
+        '''- The specific parameters are: "pps" (packets per second), "mbps" (megabits per second), "count" (the number of packets to send).\n''' \
+        '''- There are also preselected TCPReplay (you can view them all in thread info).\n''' \
+        '''- When all the needed options are selected, a thread will be created and traffic will be sent\n''' \
+        '''- TCPReplay limitaions are applicable'''
         
         clearConsole(self.os)
         print(titleFormatter('SEND TRAFFIC >> Send traffic using TCPReplay >> Choose a packet to send', level=3))
@@ -232,8 +251,9 @@ class tSend(object):
         if not userTrInp:
             return
         if int(userTrInp) < 100:
-            wrpcap('./captures/tcp_rep_sp.pcap', self.pkts[userTrInp])
-            selectedTraffic = './captures/tcp_rep_sp.pcap'
+            tcpreplayTempCap = f'./captures/tcpreplay_thid{self.setThreadIndex()}_sp.pcap'
+            wrpcap(tcpreplayTempCap, self.pkts[userTrInp])
+            selectedTraffic = tcpreplayTempCap
         elif int(userTrInp) >= 100:
             selectedTraffic = f'./captures/{self.pkts[userTrInp]}'
 
@@ -296,7 +316,7 @@ class tSend(object):
                     sleep(3)
                     i += 1
                 if self.threadsDict[threadID].is_alive():
-                    logging.error(f'Thread ID: {threadID} termination failed! Please try again')
+                    logging.error(f'Maximum number of attempts reached. Thread ID: {threadID} termination failed! Please try again')
                     raise
                 elif not self.threadsDict[threadID].is_alive():
                     print(f'Thread ID: {threadID}\'s execution has been stopped')
@@ -330,6 +350,12 @@ class tSend(object):
         logging.info(f'Thread ID {threadID} has been restarted')
 
     def threadControl(self):
+        '''- Provides various actions related to the sending threads.\n''' \
+        '''- You can view various data about the thread's execution. \n''' \
+        '''- You can stop a thread execution before its completion or when sending for an indefinite amount of time.\n''' \
+        '''- You can remove a thread (and the information it holds) after its execution is finished.\n''' \
+        '''- You can restart a thread anytime during execution or after.'''
+        
         while True:
             clearConsole(self.os)
             print(titleFormatter('SEND TRAFFIC >> Show and control the sending threads', level=3))
@@ -381,7 +407,7 @@ class tSend(object):
 
         optionDict = OrderedDict()
 
-        optionDict = {'1' : [self.showAvailablePackets, 'Display the packets available to send'],
+        optionDict = {'1' : [self.showAvailablePackets, 'Display the traffic available to send'],
                       '2' : [self.startScapyThread, 'Send traffic using Scapy'],
                       '3' : [self.startTCPReplayThread, 'Send traffic using TCPReplay'],
                       '4' : [self.threadControl, 'Show and control the sending threads'],
