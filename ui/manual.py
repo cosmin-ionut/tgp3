@@ -10,6 +10,12 @@ class manual(object):
   
     hasUI = True
     showUIMenu = "Manual"
+    _instance = None
+
+    def __new__(cls): # singleton
+        if cls._instance is None:
+            cls._instance = super(manual, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self):
         self.os = 'Windows'

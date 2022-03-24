@@ -95,6 +95,12 @@ class tSniff(object):
 
     hasUI = True
     showUIMenu = "Capture traffic"
+    _instance = None
+
+    def __new__(cls): # singleton. Make sure there can be only one craft object and use that
+        if cls._instance is None:
+            cls._instance = super(tSniff, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self):
         self.threadsDict = OrderedDict()

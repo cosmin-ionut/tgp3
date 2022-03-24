@@ -77,16 +77,16 @@ class craft(object):
                 header = userHeader + "("
             else:
                 header = "/" + userHeader + "("
-            fields = (eval('%s()' % userHeader).show(dump = True)).split('\n')
+            fields = (eval(f'{userHeader}()').show(dump = True)).split('\n')
             fields = [field[0:field.find('=')].strip().replace('\\', '') for field in fields if "#" not in field and field != '']
             for field in fields:
-                userValueForField = input("Enter a value for %s's '%s' field (empty for default): " % (userHeader, field))
+                userValueForField = input(f"Enter a value for {userHeader}'s {field} field (empty for default): ")
                 if userValueForField != '':
                     try:
                         userValueForField = int(userValueForField)
-                        header = header + "%s=%s" % (field, userValueForField)
+                        header = header + f"{field}={userValueForField}"
                     except:
-                        header = header + "%s='%s'" % (field, userValueForField)
+                        header = header + f"{field}='{userValueForField}'"
                     header = header + ','
             if header[-1] == ",":
                 header = header[0:-1] + ')'

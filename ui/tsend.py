@@ -102,7 +102,7 @@ class tSend(object):
     showUIMenu = "Send traffic"
     _instance = None
 
-    def __new__(cls): # singleton. Make sure there can be only one craft object and use that
+    def __new__(cls): # singleton
         if cls._instance is None:
             cls._instance = super(tSend, cls).__new__(cls)
         return cls._instance
@@ -293,12 +293,15 @@ class tSend(object):
                 logging.error(f'You cannot delete a running thread. Thread ID: {threadID} is still running')
                 return False
             del(self.threadsDict[threadID])
-            sleep(1)
+            i = 1
+            while threadID in self.threadsDict and i < 5:
+                sleep(1)
+                i += 1
             if threadID not in self.threadsDict:
                 logging.info(f'Thread ID: {threadID} has been deleted successfully.')
                 return True
             else:
-                raise 
+                raise Exception(f'Thread ID {threadID} couldn\'t be removed.')
         except Exception as err:
             logging.error(f'Error occured during thread removal. Error: {err}')
             return False
