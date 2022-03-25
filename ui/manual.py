@@ -17,9 +17,6 @@ class manual(object):
             cls._instance = super(manual, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self):
-        self.os = 'Windows'
-
     def resourceLoader(self):
         if 'environment' not in bootstrap.resources:
             raise Exception('OS critical resources are not available. Check \'environment\' module')
@@ -111,8 +108,8 @@ class manual(object):
     def launch(self):
         try:
             self.exitMenu = False
-            self.menuOptions()
             self.resourceLoader()
+            self.menuOptions()
             return('manual', None)
         except KeyboardInterrupt:
             raise

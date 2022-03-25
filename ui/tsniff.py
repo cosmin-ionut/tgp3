@@ -25,7 +25,7 @@ class sniffThCreator(Thread):
     def scapyAsyncCallback(self, pkt):
         self.pktBuffer.append(pkt)
         self.currentPktID += 1
-
+    '''
     def scapySniffer(self):
         try:
             if 'store' in self.sniffOptions and (self.sniffOptions['store'] == 'yes' or self.sniffOptions['store'] == True):
@@ -54,6 +54,38 @@ class sniffThCreator(Thread):
                 asyncThread.stop()
             del(self.pktBuffer)
             logging.error(err)
+    '''
+    def getId(self):
+        if hasattr(self, '_thread_id'):
+            return self._thread_id
+        for id, thread in threading._active.items():
+            if thread is self:
+                return id
+
+    def scapyStop(self):
+        thread_id = self.getId()
+        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(KeyboardInterrupt))
+        if resu > 1: 
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
+            logging.error('Failure in stopping the thread')
+
+    def scapySniffer(self):
+        try:
+            if 'store' in self.sniffOptions and (self.sniffOptions['store'] == 'yes' or self.sniffOptions['store'] == True):
+                self.sniffOptions['store'] = True
+            else:
+                self.sniffOptions['store'] = False
+
+            sniffResult = sniff(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
+            if self.sniffOptions['store']:
+                wrpcap(self.capname, sniffResult)
+        except KeyboardInterrupt:
+            if self.sniffOptions['store']:
+                wrpcap(self.capname, sniffResult)
+            return
+        except Exception as err:
+            logging.error(err)
+            self.error = err
 
     def tcpdumpSniffer(self):
         command = ['tcpdump']
@@ -197,7 +229,10 @@ class tSniff(object):
     def stopThread(self, threadID):
         try:
             if self.threadsDict[threadID].is_alive():
-                self.threadsDict[threadID].stopFlag.set()
+                if self.threadsDict[threadID].sniffType == 'Scapy':
+                    self.threadsDict[threadID].scapyStop()
+                else:
+                    self.threadsDict[threadID].stopFlag.set()
                 i = 1
                 while i <= 2 and self.threadsDict[threadID].is_alive():
                     logging.info(f'Stopping thread ID: {threadID}...attempt number {i}.')
