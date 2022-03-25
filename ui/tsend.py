@@ -32,7 +32,7 @@ class sendThCreator(Thread):
 
     def scapyStop(self):
         thread_id = self.getId()
-        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(KeyboardInterrupt))
+        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(KeyboardInterrupt))
         if resu > 1: 
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
             logging.error('Failure in stopping the thread')
@@ -319,8 +319,7 @@ class tSend(object):
                     sleep(3)
                     i += 1
                 if self.threadsDict[threadID].is_alive():
-                    logging.error(f'Maximum number of attempts reached. Thread ID: {threadID} termination failed! Please try again')
-                    raise
+                    raise Exception(f'Maximum number of attempts reached. Thread ID: {threadID} termination failed!')
                 elif not self.threadsDict[threadID].is_alive():
                     print(f'Thread ID: {threadID}\'s execution has been stopped')
                     return True

@@ -25,36 +25,7 @@ class sniffThCreator(Thread):
     def scapyAsyncCallback(self, pkt):
         self.pktBuffer.append(pkt)
         self.currentPktID += 1
-    '''
-    def scapySniffer(self):
-        try:
-            if 'store' in self.sniffOptions and (self.sniffOptions['store'] == 'yes' or self.sniffOptions['store'] == True):
-                self.sniffOptions['store'] = True
-            else:
-                self.sniffOptions['store'] = False
 
-            asyncThread = AsyncSniffer(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
-            asyncThread.start()
-            while True:
-                sleep(2)
-                if self.stopFlag.is_set():
-                    asyncThread.stop()
-                    del(self.pktBuffer)
-                    if self.sniffOptions['store'] == True:
-                        print('we will store')
-                        wrpcap(self.capname, asyncThread.results)
-                    break
-                if not asyncThread.running:
-                    del(self.pktBuffer)
-                    if self.sniffOptions['store']:
-                        wrpcap(self.capname, asyncThread.results)
-                    break
-        except Exception as err:
-            if asyncThread.running:
-                asyncThread.stop()
-            del(self.pktBuffer)
-            logging.error(err)
-    '''
     def getId(self):
         if hasattr(self, '_thread_id'):
             return self._thread_id
@@ -64,7 +35,7 @@ class sniffThCreator(Thread):
 
     def scapyStop(self):
         thread_id = self.getId()
-        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(KeyboardInterrupt))
+        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(KeyboardInterrupt))
         if resu > 1: 
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
             logging.error('Failure in stopping the thread')
@@ -239,8 +210,7 @@ class tSniff(object):
                     sleep(3)
                     i += 1
                 if self.threadsDict[threadID].is_alive():
-                    logging.error(f'Maximum number of attempts reached. Thread ID: {threadID} termination failed!')
-                    raise
+                    raise Exception(f'Maximum number of attempts reached. Thread ID: {threadID} termination failed!')
                 elif not self.threadsDict[threadID].is_alive():
                     print(f'Thread ID: {threadID}\'s execution has been stopped')
                     return True
