@@ -35,8 +35,8 @@ class sniffThCreator(Thread):
 
     def scapyStop(self):
         thread_id = self.getId()
-        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
-        if resu > 1: 
+        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(KeyboardInterrupt))
+        if resu > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
             logging.error('Failure in stopping the thread')
 
@@ -46,7 +46,6 @@ class sniffThCreator(Thread):
                 self.sniffOptions['store'] = True
             else:
                 self.sniffOptions['store'] = False
-
             sniffResult = sniff(prn = self.scapyAsyncCallback, iface = self.iface, **self.sniffOptions)
             if self.sniffOptions['store']:
                 wrpcap(self.capname, sniffResult)

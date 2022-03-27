@@ -68,7 +68,7 @@ class sendThCreator(Thread):
         command.append(self.pkt)
         ###### CALL TCPREPLAY, POPULATE THREAD INFO AND TRY TO CATCH THE ERRORS ########
         try:
-            sendProc = Popen(command, stdout=PIPE, stderr=PIPE)
+            sendProc = Popen(command, stdout=PIPE, stderr=PIPE, preexec_fn=os.setpgrp)
             while not self.stopFlag.is_set():
                 if sendProc.poll() != None:
                     break
