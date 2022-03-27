@@ -35,7 +35,7 @@ class sniffThCreator(Thread):
 
     def scapyStop(self):
         thread_id = self.getId()
-        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(KeyboardInterrupt))
+        resu = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
         if resu > 1: 
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
             logging.error('Failure in stopping the thread')
@@ -70,11 +70,12 @@ class sniffThCreator(Thread):
             command.append('--dont-verify-checksums')
         if 'verbose_level' in self.sniffOptions:
             command.append('-'+'v'*int(self.sniffOptions['verbose_level']))
-        command.extend(['-e', '--number','--print', '-i', self.iface])
+        command.extend(['-e', '--number','--print', '-l', '-i', self.iface])
         if 'filter' in self.sniffOptions:
             command.append(self.sniffOptions['filter'])
         try:
-            self.sniffProc = Popen(command, stdout=PIPE,  stderr=PIPE)
+            self.sniffProc = Popen(command, stdout=PIPE, stderr=PIPE, preexec_fn=os.setpgrp)
+            self.iterOut = iter(self.sniffProc.stdout)
             while not self.stopFlag.is_set():
                 if self.sniffProc.poll() != None:
                     break
@@ -284,15 +285,19 @@ class tSniff(object):
 
     def showTCPDumpRealtime(self, threadID):
         clearConsole(self.os)
+        #stdout = self.threadsDict[threadID].sniffProc.stdout
         try:
             if self.threadsDict[threadID].is_alive():
-                for line in iter(self.threadsDict[threadID].sniffProc.stdout.readline, ''):
-                    print(line)
+                #for line in iter(self.threadsDict[threadID].sniffProc.stdout.readline, ''):
+                 while True:
+                    print(next(self.threadsDict[threadID].iterOut))
+                 #print(line)
             else:
                 logging.info('The thread selected is not running')
                 return
         except KeyboardInterrupt:
             return
+            #self.threadsDict[threadID].sniffProc.stdout.flush()
         except Exception as err:
             logging.error(err)
 
