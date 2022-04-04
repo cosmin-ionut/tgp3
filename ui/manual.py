@@ -78,7 +78,11 @@ class manual(object):
                        'or [yes|no] if boolean. You can either provide one of the required values, or, enter nothing, for default values.\n' \
                        '2. Scapy/TCPDump limitations are applicable. This goes for what option has priority over which (timeout vs count).\n' \
                        '3. Capturing traffic using both TCPReplay and Scapy, is bound to miss traffic even at relatively low speeds.\n' \
-                       'Don\'t count on them to sniff everything.'}
+                       'Don\'t count on them to sniff everything.\n' \
+                       '4. Due to scapy\'s restrictions, on Linux, the app\'s scapy sniffer uses AsyncSniffer(), while on Windows it uses sniff()\n' \
+                       '5. Due to an error regarding how scapy\'s AsyncSniffer handles BPF filter errors, on Linux, entering an incorrect filter causes\n' \
+                       'an uncaught error, the thread won\'t capture anything but it stays running nonetheless. In this case, it must be manually stopped.\n' \
+                       'On Windows, entering an incorrect filter results in the thread capturing traffic with no filter applied.'}
         
         for k, v in d.items():
             print(k + '\n' + v + '\n')

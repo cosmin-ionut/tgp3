@@ -11,11 +11,12 @@ from utils.uiUtils import clearConsole, titleFormatter
 
 class sniffThCreator(Thread):
 
-    def __init__(self, iface=None, sniffOptions=None, sniffType=None):
+    def __init__(self, iface=None, sniffOptions=None, sniffType=None, os=None):
         Thread.__init__(self)
         self.currentPktID = 0
         self.iface = iface
         self.daemon = True
+        self.os = os
         self.sniffOptions = sniffOptions
         self.stopFlag = Event()
         self.pktBuffer = []
@@ -25,6 +26,9 @@ class sniffThCreator(Thread):
     def scapyAsyncCallback(self, pkt):
         self.pktBuffer.append(pkt)
         self.currentPktID += 1
+    
+    
+    #windows implementation of scapy sniffer. It works awesome
 
     def getId(self):
         if hasattr(self, '_thread_id'):
@@ -39,8 +43,8 @@ class sniffThCreator(Thread):
         if resu > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
             logging.error('Failure in stopping the thread')
-
-    def scapySniffer(self):
+    
+    def scapyWinSniffer(self):
         try:
             if 'store' in self.sniffOptions and (self.sniffOptions['store'] == 'yes' or self.sniffOptions['store'] == True):
                 self.sniffOptions['store'] = True
@@ -56,6 +60,35 @@ class sniffThCreator(Thread):
         except Exception as err:
             logging.error(err)
             self.error = err
+    ############################################################################
+
+    def scapyLinSniffer(self):
+        #Linux version because Linux sux
+        try:
+            if 'store' in self.sniffOptions and (self.sniffOptions['store'] == 'yes' or self.sniffOptions['store']==True):
+                self.sniffOptions['store'] = True
+            else:
+                self.sniffOptions['store'] = False
+            asyncThread = AsyncSniffer(prn=self.scapyAsyncCallback, iface=self.iface, **self.sniffOptions)
+            asyncThread.start()
+            while True:
+                sleep(2)
+                if self.stopFlag.is_set():
+                    asyncThread.stop()
+                    del(self.pktBuffer)
+                    if self.sniffOptions['store'] == True:
+                        wrpcap(self.capname, asyncThread.results)
+                    break
+                if not asyncThread.running:
+                    del(self.pktBuffer)
+                    if self.sniffOptions['store']:
+                        wrpcap(self.capname, asyncThread.results)
+                    break
+        except Exception as err:
+            if asyncThread.running:
+                asyncThread.stop()
+            del(self.pktBuffer)
+            logging.error(err)
 
     def tcpdumpSniffer(self):
         command = ['tcpdump']
@@ -89,8 +122,10 @@ class sniffThCreator(Thread):
             logging.error(err)
 
     def run(self):
-        if self.sniffType == 'Scapy':
-            self.scapySniffer()
+        if self.sniffType == 'Scapy' and self.os == 'Linux':
+            self.scapyLinSniffer()
+        elif self.sniffType == 'Scapy' and self.os == 'Windows':
+            self.scapyWinSniffer()
         elif self.sniffType == 'TCPDump':
             self.tcpdumpSniffer()
 
@@ -161,8 +196,8 @@ class tSniff(object):
 
         selectedIface = self.ifacesDict[userInput]
 
-        options = {'count' : int, 'store': ['yes','no'], 'filter': str, 'timeout': float }
-        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options), sniffType = 'Scapy')
+        options = {'count' : int, 'store': ['yes','no'], 'filter': str, 'timeout': float}
+        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options), sniffType = 'Scapy', os = self.os)
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info(f'Capturing packets on interface {selectedIface}')
@@ -200,7 +235,7 @@ class tSniff(object):
     def stopThread(self, threadID):
         try:
             if self.threadsDict[threadID].is_alive():
-                if self.threadsDict[threadID].sniffType == 'Scapy':
+                if self.threadsDict[threadID].sniffType == 'Scapy' and self.os == 'Windows':
                     self.threadsDict[threadID].scapyStop()
                 else:
                     self.threadsDict[threadID].stopFlag.set()
@@ -237,7 +272,7 @@ class tSniff(object):
             logging.error(f'Failed to restart thread\'s {threadID} execution')
             return
 
-        thread = sniffThCreator(iface = iface, sniffOptions = sniffOptions, sniffType = sniffType)
+        thread = sniffThCreator(iface = iface, sniffOptions = sniffOptions, sniffType = sniffType, os = self.os)
         thread.start()
         self.threadsDict[threadID] = thread
         logging.info(f'Thread ID {threadID} has been restarted')
