@@ -8,6 +8,7 @@ from scapy.all import *
 from utils.getCaps import getCaps
 from utils.menuOptValidator import menuOptValidator
 from utils.uiUtils import clearConsole, titleFormatter
+from scapy.arch.common import compile_filter
 
 class sniffThCreator(Thread):
 
@@ -157,7 +158,7 @@ class tSniff(object):
         logging.info(f'The thread has been assigned ID: {i}')
         return str(i)
 
-    def parseThreadOptions(self, options):
+    def parseThreadOptions(self, options, iface):
         optionsDict = {}
         for option, response in options.items():
             while True:
@@ -165,6 +166,10 @@ class tSniff(object):
                 if not userInput:
                     break
                 try:
+                    if option == 'filter':
+                        compile_filter(userInput, iface)
+                        optionsDict['filter'] = userInput
+                        break
                     if isinstance(response, list):
                         if not userInput in response:
                             print(f'Invalid input {userInput}. Please retry')
@@ -197,7 +202,7 @@ class tSniff(object):
         selectedIface = self.ifacesDict[userInput]
 
         options = {'count' : int, 'store': ['yes','no'], 'filter': str, 'timeout': float}
-        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options), sniffType = 'Scapy', os = self.os)
+        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options, selectedIface), sniffType = 'Scapy', os = self.os)
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info(f'Capturing packets on interface {selectedIface}')
@@ -227,7 +232,7 @@ class tSniff(object):
         selectedIface = self.ifacesDict[userInput]
 
         options = {'count' : int, 'verify_checksums':['yes','no'], 'direction': ['in','out','inout'], 'verbose_level': ['1','2','3'], 'write_to_file':['yes','no'], 'filter': str}
-        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options), sniffType = 'TCPDump')
+        thread = sniffThCreator(iface = selectedIface, sniffOptions = self.parseThreadOptions(options, selectedIface), sniffType = 'TCPDump', os = self.os)
         thread.start()
         self.threadsDict[self.setThreadIndex()] = thread
         logging.info(f'Capturing packets on interface {selectedIface}')
@@ -261,8 +266,6 @@ class tSniff(object):
         sniffType = self.threadsDict[threadID].sniffType
         iface = self.threadsDict[threadID].iface
         sniffOptions = self.threadsDict[threadID].sniffOptions
-
-        print(sniffType,iface, sniffOptions)
 
         if not self.stopThread(threadID):
             logging.error(f'Failed to restart thread\'s {threadID} execution')
